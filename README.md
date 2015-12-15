@@ -1,7 +1,38 @@
 # lagofirewall
 
+## Archtechture
+
+```
+    +---------------------------+
+    |add_rule/del_rule          |
+    |(db2rules, rules2flows.awk)|
+    +---------------------------+
+                  |
+                  | rest(json)
+                  |
+ +-----------------------------------+
+ | ryu(lagofirewall.py,ofctl_rest.py)|
+ +-----------------------------------+
+                  | OpenFlow1.3
+       +---------------------+
+       |       Lagopus       |
+       | (OpenFlow1.3 Switch)|
+       +---------------------+
+```
+
+### Flow tables
+
+- table0
+  - Copy l4 source port to metadata
+- table1
+  - Copy l4 destination port to metadata
+- table2
+  - filtering and output
 
 ## install
+
+- install lagopus
+- install ryu
 
 ```
 $ sudo apt-get install jq
@@ -14,7 +45,6 @@ $ cd ../..
 ```
 
 ## Usage
-
 
 ```
 $ cd lagofirewall
