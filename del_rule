@@ -1,0 +1,34 @@
+#!/bin/bash
+
+priority=$1
+IP_src=$2
+IP_dst=$3
+IP_proto=$4
+Pt_src=$5
+Pt_dst=$6
+
+if [ ${IP_proto} = "" ] ; then
+    IP_proto="0x00/0x00"
+    Pt_src="0:65535"
+    Pt_dst="0:65535"
+elif [ ${IP_proto} = "tcp" ] ; then
+    IP_proto="0x06/0xFF"
+elif [ ${IP_proto} = "udp" ] ; then
+    IP_proto="0x11/0xFF"
+else
+    echo "Do not support L4 protocol."
+    exit 1;
+fi
+
+script='s/:/ : /g'
+Pt_src=`echo ${Pt_src} | sed -e "${script}"`
+Pt_dst=`echo ${Pt_dst} | sed -e "${script}"`
+
+rule="@${IP_src} ${IP_dst} ${Pt_src} ${Pt_dst} ${IP_proto}"
+echo ${rule} > /tmp/tmp.db
+./scripts/db2rules/db2rules /tmp/tmp.db > /tmp/tmp.rules
+sed -i -e 's/[0-9]*,/'${priority}',/' /tmp/tmp.rules
+awk -f ./scripts/rules2flows.awk /tmp/tmp.rules > /tmp/tmp2.rules
+cat /tmp/tmp2.rules | ./ofctl_script/del_flow
+cat /tmp/tmp2.rules
+# ./ofctl_script/del_flow '{"table_id":2, "cookie":'$1', "cookie_mask":65535}'

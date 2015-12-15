@@ -55,3 +55,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# ofctl_script
+ofctl_script/
