@@ -17,7 +17,7 @@ from ryu import cfg
 
 CONF = cfg.CONF
 CONF.register_opts([
-     cfg.StrOpt('rules', default='[]', help='rules'),])
+    cfg.StrOpt('rules', default='[]', help='rules'),])
 
 class flow_table(object):
     def __init__(self, src_ipaddr, dst_ipaddr, src_port_min, src_port_max, dst_port_min, dst_port_max, ipproto):
@@ -28,7 +28,7 @@ class flow_table(object):
         self.dst_port_min = dst_port_min
         self.dst_port_max = dst_port_max
         self.ipproto = ipproto
-        
+
 class Lago_Firewall(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -48,34 +48,47 @@ class Lago_Firewall(app_manager.RyuApp):
             ipproto = r['ipproto']
             self.flow_info[i] = flow_table(src_ipaddr, dst_ipaddr, src_port_min, src_port_max,dst_port_min, dst_port_max, ipproto)
             i = i+1
-    
+
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
- 
-        for var in range(0,3): 
+
+        for var in range(0,3):
             mod_flow_entry(datapath, {'table_id' : var}, ofproto.OFPFC_DELETE)
 
         #initialize
         for var in range(0,2):
             for ipproto in [6,17]:
                 mod_flow_entry(datapath,
-                              {'priority' : 10,
-                               'table_id' : var,
-                               'match' : {'dl_type' : 2048,
-                                          'ip_proto' : ipproto},
-                               'actions' :[{'type' : 'OUTPUT', 'port' : ofproto.OFPP_CONTROLLER}]},
-                           ofproto.OFPFC_ADD)
+                               {'priority' : 10,
+                                'table_id' : var,
+                                'match' : {'dl_type' : 2048,
+                                           'ip_proto' : ipproto},
+                                'actions' :[{'type' : 'OUTPUT', 'port' : ofproto.OFPP_CONTROLLER}]},
+                               ofproto.OFPFC_ADD)
                 mod_flow_entry(datapath,
-                              {'priority' : 1,
-                               'table_id' : var,
-                               'match' : {},
-                               'actions' :[{'type' : 'GOTO_TABLE', 'table_id' : var+1}]},
-                ofproto.OFPFC_ADD) 
-          
+                               {'priority' : 1,
+                                'table_id' : var,
+                                'match' : {},
+                                'actions' :[{'type' : 'GOTO_TABLE', 'table_id' : var+1}]},
+                               ofproto.OFPFC_ADD)
+
+            mod_flow_entry(datapath,
+                           {'priority' : 1,
+                            'table_id' : 2,
+                            'match' : {'in_port':1},
+                            'actions' :[{'type' : 'OUTPUT', 'port' :2}]},
+                           ofproto.OFPFC_ADD)
+            mod_flow_entry(datapath,
+                           {'priority' : 1,
+                            'table_id' : 2,
+                            'match' : {'in_port':2},
+                            'actions' :[{'type' : 'OUTPUT', 'port' :1}]},
+                           ofproto.OFPFC_ADD)
+
         priority = 100
-        self.logger.info('switch joind: datapath: %061x' % datapath.id) 
+        self.logger.info('switch joind: datapath: %061x' % datapath.id)
         tmp = 0
 
         for k in self.flow_info.keys():
@@ -83,49 +96,34 @@ class Lago_Firewall(app_manager.RyuApp):
             src_ip = str(_src_ipaddr)
             _dst_ipaddr = netaddr.IPNetwork(self.flow_info[k].dst_ipaddr)
             dst_ip = str(_dst_ipaddr)
-            
+
             self.mask_list_src = {}
             self.mask_list_dst = {}
             self.val = 0
-           
+
             self.mask_list = self.calculate_port_mask(self.flow_info[k].src_port_min, self.flow_info[k].src_port_max, self.mask_list_src, self.val, 0)
             self.msk_list_src = self.mask_list
             self.mask_list = {}
-            self.val = 0 
+            self.val = 0
             self.mask_list = self.calculate_port_mask(self.flow_info[k].dst_port_min, self.flow_info[k].dst_port_max, self.mask_list_dst, self.val, 0)
             self.mask_list_dst = self.mask_list
             self.mask_list = {}
             self.val = 0
-#            self.logger.info("mask_src[%d]=%s",k,self.mask_list_src)
-#            self.logger.info("mask_dst[%d]=%s",k,self.mask_list_dst)
-            # metadata = (self.flow_info[k].src_port_min << 16) + self.flow_info[k].dst_port_min 
             for l in self.mask_list_src.keys():
-              for m in self.mask_list_dst.keys():
-                metadata = str((self.mask_list_src[l]['key'] << 16) + self.mask_list_dst[m]['key'])
-                metadata_mask = str((self.mask_list_src[l]['mask'] << 16) + self.mask_list_dst[m]['mask'])
-                mod_flow_entry(datapath,
-                              {'priority' : priority,
-                               'table_id' : 2,
-                               'match' : {'ipv4_src' : src_ip,
-                                          'ipv4_dst' : dst_ip,
-                                          'dl_type' : 2048,
-                                          'ip_proto' : int(self.flow_info[k].ipproto),
-                                          'metadata' : metadata + '/' + metadata_mask},
-                               'actions' : []},
-                               ofproto.OFPFC_ADD)
+                for m in self.mask_list_dst.keys():
+                    metadata = str((self.mask_list_src[l]['key'] << 16) + self.mask_list_dst[m]['key'])
+                    metadata_mask = str((self.mask_list_src[l]['mask'] << 16) + self.mask_list_dst[m]['mask'])
+                    mod_flow_entry(datapath,
+                                   {'priority' : priority,
+                                    'table_id' : 2,
+                                    'match' : {'ipv4_src' : src_ip,
+                                               'ipv4_dst' : dst_ip,
+                                               'dl_type' : 2048,
+                                               'ip_proto' : int(self.flow_info[k].ipproto),
+                                               'metadata' : metadata + '/' + metadata_mask},
+                                    'actions' : []},
+                                   ofproto.OFPFC_ADD)
 
-            mod_flow_entry(datapath,
-                          {'priority' : 1,
-                           'table_id' : 2,
-                           'match' : {'in_port':1},
-                           'actions' :[{'type' : 'OUTPUT', 'port' :2}]},
-                           ofproto.OFPFC_ADD)
-            mod_flow_entry(datapath,
-                          {'priority' : 1,
-                           'table_id' : 2,
-                           'match' : {'in_port':2},
-                           'actions' :[{'type' : 'OUTPUT', 'port' :1}]},
-                           ofproto.OFPFC_ADD)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
@@ -139,79 +137,78 @@ class Lago_Firewall(app_manager.RyuApp):
         pkt_tcp = pkt.get_protocol(tcp.tcp)
         header_list = dict((p.protocol_name, p)
                            for p in pkt.protocols if type(p) != str)
-        
+
         self.logger.info(header_list)
 
         if pkt_udp:
-           src_port = pkt_udp.src_port
+            src_port = pkt_udp.src_port
         elif pkt_tcp:
-           src_port = pkt_tcp.src_port
+            src_port = pkt_tcp.src_port
 
         if pkt_udp:
-           dst_port = pkt_udp.dst_port
+            dst_port = pkt_udp.dst_port
         elif pkt_tcp:
-           dst_port = pkt_tcp.dst_port
+            dst_port = pkt_tcp.dst_port
 
         for ipproto in [6,17]:
             mod_flow_entry(datapath,
-                          {'priority' : 100,
-                           'table_id' : 0,
-                           'match' : {'tp_src': src_port,
-                                      'dl_type': 2048,
-                                      'ip_proto': ipproto},
-                           'actions' :[{'type': 'WRITE_METADATA',
-                                       'metadata': src_port << 16,
-                                       'metadata_mask' : 4294901760},
-                                      {'type': 'GOTO_TABLE',
-                                       'table_id' : 1}]},
-                           ofproto.OFPFC_ADD)
-        
-            mod_flow_entry(datapath,
-                          {'priority' : 100,
-                           'table_id' : 1,
-                           'match' : {'tp_dst': src_port,
-                                      'dl_type': 2048,
-                                      'ip_proto': ipproto},
-                           'actions' :[{'type' : 'WRITE_METADATA',
-                                       'metadata': src_port,
-                                       'metadata_mask': 65535},
-                                      {'type' : 'GOTO_TABLE',
-                                       'table_id' : 2}]},
+                           {'priority' : 100,
+                            'table_id' : 0,
+                            'match' : {'tp_src': src_port,
+                                       'dl_type': 2048,
+                                       'ip_proto': ipproto},
+                            'actions' :[{'type': 'WRITE_METADATA',
+                                         'metadata': src_port << 16,
+                                         'metadata_mask' : 4294901760},
+                                        {'type': 'GOTO_TABLE',
+                                         'table_id' : 1}]},
                            ofproto.OFPFC_ADD)
 
             mod_flow_entry(datapath,
-                          {'priority' : 100,
-                           'table_id' : 0,
-                           'match' : {'tp_src': dst_port,
-                                      'dl_type': 2048,
-                                      'ip_proto': ipproto},
-                           'actions' :[{'type': 'WRITE_METADATA',
-                                       'metadata': dst_port << 16,
-                                       'metadata_mask': 4294901760},
-                                      {'type': 'GOTO_TABLE',
-                                       'table_id': 1}]},
-                           ofproto.OFPFC_ADD)
-            
-            mod_flow_entry(datapath,
-                          {'priority' : 100,
-                           'table_id' : 1,
-                           'match' : {'tp_dst': dst_port,
-                                      'dl_type': 2048,
-                                      'ip_proto': ipproto},
-                           'actions' :[{'type': 'WRITE_METADATA',
-                                       'metadata': dst_port,
-                                       'metadata_mask': 65535},
-                                      {'type' : 'GOTO_TABLE',
-                                       'table_id' : 2}]},
+                           {'priority' : 100,
+                            'table_id' : 1,
+                            'match' : {'tp_dst': src_port,
+                                       'dl_type': 2048,
+                                       'ip_proto': ipproto},
+                            'actions' :[{'type' : 'WRITE_METADATA',
+                                         'metadata': src_port,
+                                         'metadata_mask': 65535},
+                                        {'type' : 'GOTO_TABLE',
+                                         'table_id' : 2}]},
                            ofproto.OFPFC_ADD)
 
-            self.packet_out(datapath, pkt) 
-     
-                
+            mod_flow_entry(datapath,
+                           {'priority' : 100,
+                            'table_id' : 0,
+                            'match' : {'tp_src': dst_port,
+                                       'dl_type': 2048,
+                                       'ip_proto': ipproto},
+                            'actions' :[{'type': 'WRITE_METADATA',
+                                         'metadata': dst_port << 16,
+                                         'metadata_mask': 4294901760},
+                                        {'type': 'GOTO_TABLE',
+                                         'table_id': 1}]},
+                           ofproto.OFPFC_ADD)
+
+            mod_flow_entry(datapath,
+                           {'priority' : 100,
+                            'table_id' : 1,
+                            'match' : {'tp_dst': dst_port,
+                                       'dl_type': 2048,
+                                       'ip_proto': ipproto},
+                            'actions' :[{'type': 'WRITE_METADATA',
+                                         'metadata': dst_port,
+                                         'metadata_mask': 65535},
+                                        {'type' : 'GOTO_TABLE',
+                                         'table_id' : 2}]},
+                           ofproto.OFPFC_ADD)
+
+            self.packet_out(datapath, pkt)
+
     def packet_out(self, datapath, pkt):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        
+
         pkt.serialize()
         self.logger.info("packet_out %s" %(pkt,))
         data = pkt.data
@@ -222,34 +219,27 @@ class Lago_Firewall(app_manager.RyuApp):
         datapath.send_msg(out)
 
     def calculate_port_mask(self, port_min, port_max, mask_list, val, length):
-#        print "check ports"
-#        print port_min
-#        print port_max
-        
         if length > 0:
-           tmp_mask = (65535 << (16 - length)) & 65535
-#           print tmp_mask
+            tmp_mask = (65535 << (16 - length)) & 65535
         else :
-           tmp_mask = 0
+            tmp_mask = 0
 
         if ((port_min & tmp_mask) == port_min) and ((port_max | ~(tmp_mask)) & 65535 == port_max):
             if ((port_min & tmp_mask) != (port_max & tmp_mask)):
                 length = length - 1
-            if length > 0:
-                tmp_mask = (65535 << (16 - length)) & 65535
-#                print tmp_mask
-            else:
-                length = 0
+                if length > 0:
+                    tmp_mask = (65535 << (16 - length)) & 65535
+                else:
+                    length = 0
 
             mask_list[self.val] = {"key":port_min, "mask":tmp_mask}
 
             self.val = self.val + 1
-            # print #mask_list
             return 0
 
         if ((port_min & tmp_mask) == (port_max & tmp_mask)):
-           self.calculate_port_mask(port_min, port_max, mask_list, val, length + 1)
+            self.calculate_port_mask(port_min, port_max, mask_list, val, length + 1)
         else:
-           self.calculate_port_mask(port_min, (port_min | ~(tmp_mask)) & 65535, mask_list, val, length + 1)
-           self.calculate_port_mask((port_max & (tmp_mask)), port_max, mask_list, val, length + 1)
-        return mask_list
+            self.calculate_port_mask(port_min, (port_min | ~(tmp_mask)) & 65535, mask_list, val, length + 1)
+            self.calculate_port_mask((port_max & (tmp_mask)), port_max, mask_list, val, length + 1)
+            return mask_list

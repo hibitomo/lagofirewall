@@ -1,6 +1,6 @@
 # lagofirewall
 
-## Archtechture
+## Architechture
 
 ```
     +---------------------------+
