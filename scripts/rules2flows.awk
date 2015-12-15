@@ -22,6 +22,6 @@ BEGIN {
 		l4_match = l4_match","metadata
 	    }
     }
-    str = "{"table_id","priority","cookie","actions",\"match\":{\"in_port\":1,"dl_type","ip_src","ip_dst""l4_match"}}";
+    str = "{"table_id","priority","cookie","actions",\"match\":{"dl_type","ip_src","ip_dst""l4_match"}}";
     print str;
 }
