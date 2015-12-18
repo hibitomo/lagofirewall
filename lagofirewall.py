@@ -71,56 +71,6 @@ class Lago_Firewall(app_manager.RyuApp):
         for k in self.flow_info.keys():
             self.add_flow_rules(datapath, ofproto, self.flow_info[k])
 
-    def add_flow_rules(self, datapath, ofproto, rule):
-        print rule
-        _src_ipaddr = netaddr.IPNetwork(rule["src_ipaddr"])
-        src_ip = str(_src_ipaddr)
-        _dst_ipaddr = netaddr.IPNetwork(rule["dst_ipaddr"])
-        dst_ip = str(_dst_ipaddr)
-
-        self.port_list_src = self.calculate_port_mask(rule["src_port_min"], rule["src_port_max"], 0)
-        self.port_list_dst = self.calculate_port_mask(rule["dst_port_min"], rule["dst_port_max"], 0)
-
-        for l in self.port_list_src:
-            for m in self.port_list_dst:
-                metadata = str((l['key'] << 16) + m['key'])
-                metadata_mask = str((l['mask'] << 16) + m['mask'])
-                mod_flow_entry(datapath,
-                               {'priority' : rule["priority"],
-                                'table_id' : 2,
-                                'match' : {'ipv4_src' : src_ip,
-                                           'ipv4_dst' : dst_ip,
-                                           'dl_type' : 2048,
-                                           'ip_proto' : int(rule["ipproto"]),
-                                           'metadata' : metadata + '/' + metadata_mask},
-                                'actions' : []},
-                               ofproto.OFPFC_ADD)
-
-    def calculate_port_mask(self, port_min, port_max, length):
-        port_list = []
-        if length > 0:
-            tmp_mask = (65535 << (16 - length)) & 65535
-        else :
-            tmp_mask = 0
-
-        if ((port_min & tmp_mask) == port_min) and ((port_max | ~(tmp_mask)) & 65535 == port_max):
-            if ((port_min & tmp_mask) != (port_max & tmp_mask)):
-                length = length - 1
-            if length > 0:
-                tmp_mask = (65535 << (16 - length)) & 65535
-            else:
-                length = 0
-            port_list.append({"key":port_min, "mask":tmp_mask})
-            return port_list
-
-        if ((port_min & tmp_mask) == (port_max & tmp_mask)):
-            port_list.extend(self.calculate_port_mask(port_min, port_max, length + 1))
-        else:
-            port_list.extend(self.calculate_port_mask(port_min, (port_min | ~(tmp_mask)) & 65535, length + 1))
-            port_list.extend(self.calculate_port_mask((port_max & (tmp_mask)), port_max, length + 1))
-        return port_list
-
-
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
         msg = ev.msg
@@ -184,3 +134,54 @@ class Lago_Firewall(app_manager.RyuApp):
                                   data = data)
         datapath.send_msg(out)
 
+
+    @classmethod
+    def add_flow_rules(cls, datapath, ofproto, rule):
+        print rule
+        _src_ipaddr = netaddr.IPNetwork(rule["src_ipaddr"])
+        src_ip = str(_src_ipaddr)
+        _dst_ipaddr = netaddr.IPNetwork(rule["dst_ipaddr"])
+        dst_ip = str(_dst_ipaddr)
+
+        port_list_src = Lago_Firewall.calculate_port_mask(rule["src_port_min"], rule["src_port_max"], 0)
+        port_list_dst = Lago_Firewall.calculate_port_mask(rule["dst_port_min"], rule["dst_port_max"], 0)
+
+        for l in port_list_src:
+            for m in port_list_dst:
+                metadata = str((l['key'] << 16) + m['key'])
+                metadata_mask = str((l['mask'] << 16) + m['mask'])
+                mod_flow_entry(datapath,
+                               {'priority' : rule["priority"],
+                                'table_id' : 2,
+                                'match' : {'ipv4_src' : src_ip,
+                                           'ipv4_dst' : dst_ip,
+                                           'dl_type' : 2048,
+                                           'ip_proto' : int(rule["ipproto"]),
+                                           'metadata' : metadata + '/' + metadata_mask},
+                                'actions' : []},
+                               ofproto.OFPFC_ADD)
+
+    @classmethod
+    def calculate_port_mask(self, port_min, port_max, length):
+        port_list = []
+        if length > 0:
+            tmp_mask = (65535 << (16 - length)) & 65535
+        else :
+            tmp_mask = 0
+
+        if ((port_min & tmp_mask) == port_min) and ((port_max | ~(tmp_mask)) & 65535 == port_max):
+            if ((port_min & tmp_mask) != (port_max & tmp_mask)):
+                length = length - 1
+            if length > 0:
+                tmp_mask = (65535 << (16 - length)) & 65535
+            else:
+                length = 0
+            port_list.append({"key":port_min, "mask":tmp_mask})
+            return port_list
+
+        if ((port_min & tmp_mask) == (port_max & tmp_mask)):
+            port_list.extend(self.calculate_port_mask(port_min, port_max, length + 1))
+        else:
+            port_list.extend(self.calculate_port_mask(port_min, (port_min | ~(tmp_mask)) & 65535, length + 1))
+            port_list.extend(self.calculate_port_mask((port_max & (tmp_mask)), port_max, length + 1))
+        return port_list
