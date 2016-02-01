@@ -137,6 +137,28 @@ class Lago_Firewall(app_manager.RyuApp):
 
     @classmethod
     def add_flow_rules(cls, datapath, ofproto, rule):
+        match = rule
+
+        port_list_src = [{'key':0,'mask':0}]
+        port_list_dst = [{'key':0,'mask':0}]
+
+        match["dl_type"] = 2048
+
+        for l in port_list_src:
+            for m in port_list_dst:
+                metadata = str((l['key'] << 16) + m['key'])
+                metadata_mask = str((l['mask'] << 16) + m['mask'])
+                match["matadata"] = metadata + '/' + metadata_mask
+
+                mod_flow_entry(datapath,
+                               {'priority' : rule["priority"],
+                                'table_id' : 2,
+                                'match' : match,
+                                'actions' : []},
+                               ofproto.OFPFC_ADD)
+
+    @classmethod
+    def dell_flow_rules(cls, datapath, ofproto, rule):
         print rule
         _src_ipaddr = netaddr.IPNetwork(rule["src_ipaddr"])
         src_ip = str(_src_ipaddr)
@@ -159,7 +181,7 @@ class Lago_Firewall(app_manager.RyuApp):
                                            'ip_proto' : int(rule["ipproto"]),
                                            'metadata' : metadata + '/' + metadata_mask},
                                 'actions' : []},
-                               ofproto.OFPFC_ADD)
+                               ofproto.OFPFC_DELETE)
 
     @classmethod
     def calculate_port_mask(self, port_min, port_max, length):
